@@ -1,0 +1,101 @@
+version: '3.9'
+
+services:
+
+  db:
+    image: mysql:8.0
+    container_name: sb_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: sovereign_root
+      MYSQL_DATABASE: sovereign_wp
+      MYSQL_USER: sovereign
+      MYSQL_PASSWORD: sovereign_pass
+    volumes:
+      - D:/sovereign-dev/data/mysql:/var/lib/mysql
+    networks:
+      - sovereign_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-psovereign_root"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  wordpress:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sb_wordpress
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: sovereign_wp
+      WORDPRESS_DB_USER: sovereign
+      WORDPRESS_DB_PASSWORD: sovereign_pass
+      WORDPRESS_DEBUG: "true"
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_DEBUG_LOG', true);
+        define('WP_DEBUG_DISPLAY', false);
+        define('SCRIPT_DEBUG', true);
+    volumes:
+      - D:/sovereign-dev/data/wordpress:/var/www/html
+      - D:/sovereign-dev/plugin:/var/www/html/wp-content/plugins/sovereign-builder
+      - D:/sovereign-dev/logs:/var/www/html/wp-content/debug-logs
+    ports:
+      - "8080:80"
+    networks:
+      - sovereign_net
+
+  wpcli:
+    image: wordpress:cli
+    container_name: sb_wpcli
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: sovereign_wp
+      WORDPRESS_DB_USER: sovereign
+      WORDPRESS_DB_PASSWORD: sovereign_pass
+    volumes:
+      - D:/sovereign-dev/data/wordpress:/var/www/html
+      - D:/sovereign-dev/plugin:/var/www/html/wp-content/plugins/sovereign-builder
+      - D:/sovereign-dev/blueprints:/blueprints
+      - D:/sovereign-dev/provision.sh:/provision.sh
+    networks:
+      - sovereign_net
+    entrypoint: ["tail", "-f", "/dev/null"]
+    user: "33:33"
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: sb_phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_USER: sovereign
+      PMA_PASSWORD: sovereign_pass
+    ports:
+      - "8081:80"
+    networks:
+      - sovereign_net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sb_ollama
+    restart: unless-stopped
+    volumes:
+      - D:/sovereign-dev/data/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - sovereign_net
+
+networks:
+  sovereign_net:
+    driver: bridge
