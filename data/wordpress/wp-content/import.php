@@ -1,0 +1,1 @@
+﻿<?php require("/var/www/html/wp-load.php"); global $wpdb; $run = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}sb_factory_runs WHERE id = 5"); echo "Status: " . $run->status . "\n"; $outputs = json_decode($run->layer_outputs, true); foreach($outputs as $label => $output) { echo "\n=== " . $label . " ===\n"; echo substr($output, 0, 1200) . "\n"; }
