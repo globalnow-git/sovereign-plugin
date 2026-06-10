@@ -1,0 +1,406 @@
+{
+  "slug": "book-development-portal",
+  "label": "Book Development Portal",
+  "version": "1.0.0",
+  "category": "saas",
+  "blueprint_type": "vertical-app",
+  "description": "A complete AI-assisted book development system with HITM logging. Authors drive every creative decision while the system builds an immutable audit trail proving human authorship at every stage.",
+  "signals": [
+    "book_project_created",
+    "seed_submitted",
+    "character_logged",
+    "structure_approved",
+    "chapter_approved",
+    "book_completed"
+  ],
+  "roads": [
+    { "road_key": "A", "label": "Active — in development" },
+    { "road_key": "B", "label": "Complete — ready for export" },
+    { "road_key": "C", "label": "Paused — author returning later" }
+  ],
+  "forms": [
+    {
+      "slug": "book-project-create",
+      "label": "Start Your Book Project",
+      "save_adapter": "submission_table",
+      "save_config_json": { "signal_type": "book_project_created" },
+      "fields_json": [
+        {
+          "key": "book_title",
+          "label": "Working Title",
+          "type": "text",
+          "required": true,
+          "placeholder": "What is your book called? (can change later)"
+        },
+        {
+          "key": "author_name",
+          "label": "Author Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Name as it will appear on the cover"
+        },
+        {
+          "key": "genre",
+          "label": "Genre",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Literary Fiction",
+            "Commercial Fiction",
+            "Mystery / Thriller",
+            "Science Fiction",
+            "Fantasy",
+            "Romance",
+            "Historical Fiction",
+            "Horror",
+            "Non-Fiction",
+            "Memoir",
+            "Self-Help",
+            "Business",
+            "Children's",
+            "Young Adult",
+            "Other"
+          ]
+        },
+        {
+          "key": "target_audience",
+          "label": "Target Audience",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Who is this book for? Be specific — age range, interests, what they're struggling with or dreaming about."
+        },
+        {
+          "key": "publishing_goal",
+          "label": "Publishing Goal",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Amazon KDP Self-Publishing",
+            "IngramSpark Wide Distribution",
+            "Traditional Publisher Submission",
+            "Draft2Digital / Smashwords",
+            "Personal / Gift Use",
+            "Digital Only",
+            "Undecided"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "book-seed-idea",
+      "label": "Your Story Vision",
+      "save_adapter": "submission_table",
+      "save_config_json": { "signal_type": "seed_submitted" },
+      "fields_json": [
+        {
+          "key": "book_title_ref",
+          "label": "Book Title",
+          "type": "text",
+          "required": true,
+          "placeholder": "Enter your working title"
+        },
+        {
+          "key": "story_vision",
+          "label": "Your Complete Story Vision",
+          "type": "textarea",
+          "required": true,
+          "min_words": 2000,
+          "rows": 20,
+          "placeholder": "This is your creative foundation — write everything. The world, the conflict, the emotional core, the ending you're working toward, the themes that matter to you, the scenes you can already see. Minimum 2,000 words. There is no right format. Write the way you think."
+        },
+        {
+          "key": "inspiration",
+          "label": "What Inspired This Book",
+          "type": "textarea",
+          "required": true,
+          "rows": 4,
+          "placeholder": "What sparked this idea? A personal experience, a question you can't stop asking, something you witnessed, a dream?"
+        },
+        {
+          "key": "books_like_mine",
+          "label": "Books Like Mine",
+          "type": "textarea",
+          "required": false,
+          "rows": 3,
+          "placeholder": "Name 2-3 books with a similar feel, audience, or theme. This helps the AI understand your target voice."
+        },
+        {
+          "key": "author_declaration",
+          "label": "I confirm this story vision is my own original creative work and represents my authentic voice and ideas.",
+          "type": "checkbox",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "character-development-log",
+      "label": "Character Development Session",
+      "save_adapter": "submission_table",
+      "save_config_json": { "signal_type": "character_logged" },
+      "fields_json": [
+        {
+          "key": "character_name",
+          "label": "Character Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Full name as they appear in the book"
+        },
+        {
+          "key": "character_role",
+          "label": "Role in Story",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Protagonist",
+            "Antagonist",
+            "Supporting — Major",
+            "Supporting — Minor",
+            "Mentor",
+            "Love Interest",
+            "Comic Relief",
+            "Other"
+          ]
+        },
+        {
+          "key": "author_vision",
+          "label": "Your Vision for This Character",
+          "type": "textarea",
+          "required": true,
+          "rows": 6,
+          "placeholder": "Who is this person? What do they want, what are they afraid of, what do they believe about the world? Where do they start and where do they end up?"
+        },
+        {
+          "key": "ai_development_notes",
+          "label": "AI Development Notes",
+          "type": "textarea",
+          "required": false,
+          "rows": 4,
+          "placeholder": "Paste any AI suggestions you received and note what you kept, changed, or rejected."
+        },
+        {
+          "key": "author_decisions",
+          "label": "Your Final Decisions for This Character",
+          "type": "textarea",
+          "required": true,
+          "rows": 6,
+          "placeholder": "What did you decide about this character? Write their final profile as you have approved it — backstory, arc, voice, key moments."
+        },
+        {
+          "key": "character_complete",
+          "label": "I confirm this character profile represents my creative decisions and is approved for use in the book.",
+          "type": "checkbox",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "chapter-structure-approval",
+      "label": "Chapter Structure Approval",
+      "save_adapter": "submission_table",
+      "save_config_json": { "signal_type": "structure_approved" },
+      "fields_json": [
+        {
+          "key": "structure_overview",
+          "label": "Your Approved Chapter Structure",
+          "type": "textarea",
+          "required": true,
+          "rows": 12,
+          "placeholder": "List each chapter with a brief description of what happens. This is your approved roadmap — you control what goes here. AI suggestions go in the next field."
+        },
+        {
+          "key": "ai_suggestions_used",
+          "label": "AI Suggestions Reviewed",
+          "type": "textarea",
+          "required": false,
+          "rows": 6,
+          "placeholder": "What did the AI suggest for structure? Note what you accepted, modified, or rejected."
+        },
+        {
+          "key": "structural_changes",
+          "label": "Changes You Made to AI Suggestions",
+          "type": "textarea",
+          "required": false,
+          "rows": 4,
+          "placeholder": "Describe any structural decisions that were yours alone — chapters you added, removed, reordered, or reimagined."
+        },
+        {
+          "key": "total_chapters",
+          "label": "Total Number of Chapters",
+          "type": "number",
+          "required": true,
+          "placeholder": "e.g. 24"
+        },
+        {
+          "key": "structure_approved_declaration",
+          "label": "I approve this chapter structure as my creative roadmap for the book. Changes to the structure will be logged as new entries.",
+          "type": "checkbox",
+          "required": true
+        }
+      ]
+    },
+    {
+      "slug": "chapter-session-log",
+      "label": "Chapter Writing Session",
+      "save_adapter": "submission_table",
+      "save_config_json": { "signal_type": "chapter_approved" },
+      "fields_json": [
+        {
+          "key": "chapter_number",
+          "label": "Chapter Number",
+          "type": "number",
+          "required": true,
+          "placeholder": "e.g. 3"
+        },
+        {
+          "key": "chapter_title",
+          "label": "Chapter Title",
+          "type": "text",
+          "required": false,
+          "placeholder": "Optional working title for this chapter"
+        },
+        {
+          "key": "author_direction",
+          "label": "Your Direction for This Chapter",
+          "type": "textarea",
+          "required": true,
+          "rows": 6,
+          "placeholder": "What did you tell the AI? What tone, what events, what voice examples did you give? What was the specific creative direction that was yours?"
+        },
+        {
+          "key": "voice_examples",
+          "label": "Voice or Style Examples You Provided",
+          "type": "textarea",
+          "required": false,
+          "rows": 4,
+          "placeholder": "Did you write any lines yourself, provide examples of the style you wanted, or paste in your own draft sections? Include them here."
+        },
+        {
+          "key": "ai_draft_summary",
+          "label": "What the AI Produced",
+          "type": "textarea",
+          "required": true,
+          "rows": 4,
+          "placeholder": "Briefly describe what the AI drafted. You don't need to paste the full text — describe what it got right and wrong."
+        },
+        {
+          "key": "author_edits",
+          "label": "Your Edits and Decisions",
+          "type": "textarea",
+          "required": true,
+          "rows": 6,
+          "placeholder": "What did you change, rewrite, cut, or add? What creative decisions did you make to shape the final chapter?"
+        },
+        {
+          "key": "approval_action",
+          "label": "Chapter Status",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Approved — chapter complete",
+            "Approved with my edits — logging and continuing",
+            "Rejected — I rewrote this chapter myself",
+            "Rejected — reprompting with new direction",
+            "In progress — saving session log"
+          ]
+        },
+        {
+          "key": "final_chapter_text",
+          "label": "Final Approved Chapter Text",
+          "type": "textarea",
+          "required": false,
+          "rows": 16,
+          "placeholder": "Paste the final approved text for this chapter. This becomes part of your immutable authorship record."
+        }
+      ]
+    }
+  ],
+  "schemas": [
+    {
+      "slug": "book-project-dashboard",
+      "label": "My Book Projects",
+      "schema_json": {
+        "source_table": "sb_submissions",
+        "filter": { "form_slug": "book-project-create" },
+        "layout": "table",
+        "columns": [
+          { "key": "book_title", "label": "Title" },
+          { "key": "genre", "label": "Genre" },
+          { "key": "publishing_goal", "label": "Publishing Goal" },
+          { "key": "submitted_at", "label": "Started" }
+        ]
+      }
+    },
+    {
+      "slug": "authorship-log",
+      "label": "Authorship Activity Log",
+      "schema_json": {
+        "source_table": "sb_submissions",
+        "filter": {},
+        "layout": "table",
+        "columns": [
+          { "key": "form_slug", "label": "Stage" },
+          { "key": "submitted_at", "label": "Timestamp" },
+          { "key": "status", "label": "Status" }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "title": "Start Your Book",
+      "slug": "book-start",
+      "shortcode": "[sb_form slug=\"book-project-create\"]"
+    },
+    {
+      "title": "Your Story Vision",
+      "slug": "book-seed",
+      "shortcode": "[sb_form slug=\"book-seed-idea\"]"
+    },
+    {
+      "title": "Character Development",
+      "slug": "book-characters",
+      "shortcode": "[sb_form slug=\"character-development-log\"]"
+    },
+    {
+      "title": "Chapter Structure",
+      "slug": "book-structure",
+      "shortcode": "[sb_form slug=\"chapter-structure-approval\"]"
+    },
+    {
+      "title": "Write Your Chapters",
+      "slug": "book-chapters",
+      "shortcode": "[sb_form slug=\"chapter-session-log\"]"
+    },
+    {
+      "title": "My Authorship Record",
+      "slug": "book-authorship-record",
+      "shortcode": "[sb_submissions_view form=\"chapter-session-log\" title=\"Chapter Writing Log\"]"
+    },
+    {
+      "title": "My Book Dashboard",
+      "slug": "book-dashboard",
+      "shortcode": "[sb_submissions_view form=\"book-project-create\" title=\"My Book Projects\"]"
+    }
+  ],
+  "pipeline": {
+    "slug": "book-development-pipeline",
+    "label": "Book Development AI Pipeline",
+    "steps": [
+      {
+        "step": 1,
+        "role": "Story Analyst",
+        "instruction": "You are a Story Analyst reviewing an author's complete story vision submission. The author has written a detailed creative vision of 2000+ words. Your role is to: 1) Identify the core emotional premise, 2) Name the central conflict, 3) Identify key themes, 4) Note the narrative voice and tone, 5) Suggest 3-5 questions the author should answer before moving to character development. Be encouraging but specific. Never rewrite their vision — only reflect and question. Output: PREMISE, CONFLICT, THEMES, VOICE, QUESTIONS_FOR_AUTHOR."
+      },
+      {
+        "step": 2,
+        "role": "Character Architect",
+        "instruction": "You are a Character Architect. Based on the story vision and the author's character notes, develop a comprehensive character profile. Include: full backstory, psychological profile, wants vs needs, fear, wound, lie they believe, truth they need to learn, character arc from start to end, key relationships, distinctive voice patterns, and physical presence. Present these as options and questions for the author to decide — never as final decisions. The author approves everything. Output structured as: BACKSTORY_OPTIONS, PSYCHOLOGICAL_PROFILE, CHARACTER_ARC_PROPOSAL, QUESTIONS_FOR_AUTHOR_DECISION."
+      },
+      {
+        "step": 3,
+        "role": "HITM Certification Writer",
+        "instruction": "You are a Human-In-The-Middle Certification Writer. Review the complete authorship log for this book project — the seed vision, all character development sessions, the structure approval, and all chapter session logs. Generate a formal HITM Certification Document that: 1) Lists every stage completed with timestamp, 2) Summarizes the human creative decisions made at each stage, 3) Documents AI assistance used and how it was directed by the author, 4) Produces a CERTIFICATION ID, 5) Closes with a formal declaration of authentic authorship. This document is legally defensible and may be shown to publishers, platforms, or courts. Tone: formal, precise, factual."
+      }
+    ]
+  }
+}

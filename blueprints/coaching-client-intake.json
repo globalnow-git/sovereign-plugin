@@ -1,0 +1,320 @@
+{
+  "slug": "coaching-client-intake",
+  "label": "Coaching Client Intake",
+  "version": "1.0.0",
+  "category": "saas",
+  "blueprint_type": "vertical-app",
+  "description": "Client intake system for coaching practices with submission editing, automated notifications, and AI-powered client analysis.",
+  "signals": [
+    "intake_submitted",
+    "intake_viewed",
+    "intake_updated",
+    "client_contacted",
+    "confirmation_sent",
+    "coach_notified"
+  ],
+  "roads": [
+    {
+      "road_key": "A",
+      "label": "New Client Intake"
+    },
+    {
+      "road_key": "B",
+      "label": "Coach Dashboard"
+    },
+    {
+      "road_key": "C",
+      "label": "My Submission"
+    }
+  ],
+  "forms": [
+    {
+      "slug": "client-intake-form",
+      "label": "Client Intake Form",
+      "save_adapter": "submission_table",
+      "save_config_json": {
+        "signal_type": "intake_submitted",
+        "trigger_signals": [
+          "confirmation_sent",
+          "coach_notified"
+        ],
+        "allow_updates": true,
+        "update_signal": "intake_updated"
+      },
+      "fields_json": [
+        {
+          "key": "full_name",
+          "label": "Full Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Enter your full name"
+        },
+        {
+          "key": "email",
+          "label": "Email Address",
+          "type": "email",
+          "required": true,
+          "placeholder": "your.email@example.com"
+        },
+        {
+          "key": "phone",
+          "label": "Phone Number",
+          "type": "tel",
+          "required": true,
+          "placeholder": "(555) 123-4567"
+        },
+        {
+          "key": "coaching_goals",
+          "label": "What do you want to achieve through coaching?",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Describe your goals and what success looks like to you"
+        },
+        {
+          "key": "biggest_challenge",
+          "label": "What is your biggest current challenge?",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "Tell us about the main obstacle you're facing right now"
+        },
+        {
+          "key": "preferred_contact",
+          "label": "Preferred Contact Method",
+          "type": "select",
+          "required": false,
+          "options": [
+            "Email",
+            "Phone",
+            "Either"
+          ]
+        },
+        {
+          "key": "budget_range",
+          "label": "Monthly Budget Range",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Under $200",
+            "$200-$500",
+            "$500-$1000",
+            "$1000-$2000",
+            "Over $2000",
+            "Prefer to discuss"
+          ]
+        },
+        {
+          "key": "coaching_format",
+          "label": "Preferred Coaching Format",
+          "type": "select",
+          "required": true,
+          "options": [
+            "One-on-one sessions",
+            "Group coaching",
+            "Hybrid (mix of individual and group)",
+            "Open to recommendations"
+          ]
+        }
+      ]
+    }
+  ],
+  "schemas": [
+    {
+      "slug": "intake-submissions-dashboard",
+      "label": "Client Intake Submissions",
+      "schema_json": {
+        "source_table": "sb_submissions",
+        "filter": {
+          "form_slug": "client-intake-form"
+        },
+        "layout": "table",
+        "sort": {
+          "field": "submitted_at",
+          "order": "desc"
+        },
+        "columns": [
+          {
+            "key": "submitted_at",
+            "label": "Submission Date",
+            "sortable": true
+          },
+          {
+            "key": "full_name",
+            "label": "Client Name",
+            "sortable": true
+          },
+          {
+            "key": "email",
+            "label": "Email"
+          },
+          {
+            "key": "phone",
+            "label": "Phone"
+          },
+          {
+            "key": "coaching_goals",
+            "label": "Goals",
+            "truncate": 100
+          },
+          {
+            "key": "biggest_challenge",
+            "label": "Challenge",
+            "truncate": 100
+          },
+          {
+            "key": "budget_range",
+            "label": "Budget"
+          },
+          {
+            "key": "coaching_format",
+            "label": "Format Preference"
+          },
+          {
+            "key": "preferred_contact",
+            "label": "Contact Method"
+          }
+        ],
+        "actions": [
+          {
+            "label": "View Details",
+            "type": "view"
+          },
+          {
+            "label": "Mark Contacted",
+            "type": "signal",
+            "signal": "client_contacted"
+          }
+        ]
+      }
+    },
+    {
+      "slug": "my-intake-submission",
+      "label": "My Intake Submission",
+      "schema_json": {
+        "source_table": "sb_submissions",
+        "filter": {
+          "form_slug": "client-intake-form",
+          "user_email": "{{current_user_email}}"
+        },
+        "layout": "detail",
+        "columns": [
+          {
+            "key": "full_name",
+            "label": "Full Name"
+          },
+          {
+            "key": "email",
+            "label": "Email Address"
+          },
+          {
+            "key": "phone",
+            "label": "Phone Number"
+          },
+          {
+            "key": "coaching_goals",
+            "label": "Coaching Goals"
+          },
+          {
+            "key": "biggest_challenge",
+            "label": "Biggest Challenge"
+          },
+          {
+            "key": "preferred_contact",
+            "label": "Preferred Contact Method"
+          },
+          {
+            "key": "budget_range",
+            "label": "Budget Range"
+          },
+          {
+            "key": "coaching_format",
+            "label": "Coaching Format"
+          },
+          {
+            "key": "submitted_at",
+            "label": "Submitted On"
+          },
+          {
+            "key": "updated_at",
+            "label": "Last Updated"
+          }
+        ],
+        "actions": [
+          {
+            "label": "Edit My Submission",
+            "type": "edit",
+            "form_slug": "client-intake-form"
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "title": "New Client Intake",
+      "slug": "client-intake",
+      "shortcode": "[sb_form slug=\"client-intake-form\"]"
+    },
+    {
+      "title": "Intake Dashboard",
+      "slug": "dashboard",
+      "shortcode": "[sb_schema slug=\"intake-submissions-dashboard\"]"
+    },
+    {
+      "title": "My Submission",
+      "slug": "my-submission",
+      "shortcode": "[sb_schema slug=\"my-intake-submission\"]"
+    }
+  ],
+  "portal": {
+    "nav": "vertical",
+    "lock_stages": false,
+    "show_progress": false,
+    "color_scheme": "light",
+    "stages": [
+      {
+        "stage_key": "intake",
+        "label": "Submit Intake",
+        "pages": [
+          "client-intake"
+        ]
+      },
+      {
+        "stage_key": "my_info",
+        "label": "My Information",
+        "pages": [
+          "my-submission"
+        ],
+        "role_required": "client"
+      },
+      {
+        "stage_key": "review",
+        "label": "Review Submissions",
+        "pages": [
+          "dashboard"
+        ],
+        "role_required": "coach"
+      }
+    ]
+  },
+  "pipeline": {
+    "slug": "intake-review-pipeline",
+    "label": "Client Intake Review",
+    "steps": [
+      {
+        "step": 1,
+        "role": "Intake Analyst",
+        "instruction": "Review the client intake submission and extract key information. Identify the primary coaching focus area (career, relationships, health, personal growth, business) based on their stated goals and challenges. Assess the urgency level based on language used in the challenge description. Analyze the budget range and coaching format preference to determine service compatibility. Flag any potential compatibility issues or red flags that the coach should be aware of before the initial consultation. Consider whether the client's budget aligns with their preferred coaching format and goals."
+      },
+      {
+        "step": 2,
+        "role": "Client Success Coordinator",
+        "instruction": "Based on the intake information and initial analysis, draft a complete personalized welcome email for the coach to review and approve before sending. The email should: 1) Open with a warm greeting using their name and express appreciation for their submission. 2) Acknowledge their specific goals and challenges mentioned in the intake form. 3) Suggest 2-3 potential coaching focus areas that align with their stated needs and budget/format preferences. 4) Propose concrete next steps including scheduling an initial consultation with a link or call-to-action. 5) Address their coaching format preference and explain how it aligns with available offerings. 6) Maintain a warm, encouraging, and professional tone that builds rapport and excitement. The email should be ready to send with minimal editing required from the coach."
+      },
+      {
+        "step": 3,
+        "role": "Coach Advisory Assistant",
+        "instruction": "Create a comprehensive pre-consultation brief for the coach that includes: 1) Executive summary of the client's goals and challenges in 3-5 bullet points. 2) Analysis of budget range and coaching format preference with recommendations on appropriate service offerings or package options. 3) Relevant coaching frameworks or approaches that may be effective based on the stated challenges (e.g., GROW model, cognitive behavioral approaches, strengths-based coaching). 4) Identification of potential obstacles to success or areas requiring special attention. 5) 3-4 powerful open-ended questions to ask during the initial consultation to deepen understanding and build rapport. 6) Any compatibility considerations between client expectations (budget/format) and the coaching practice's offerings. Format this as a coach-ready consultation prep document."
+      }
+    ]
+  }
+}

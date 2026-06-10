@@ -1,1 +1,6 @@
-﻿<?php require("/var/www/html/wp-load.php"); global $wpdb; $run = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}sb_factory_runs WHERE id = 5"); echo "Status: " . $run->status . "\n"; $outputs = json_decode($run->layer_outputs, true); foreach($outputs as $label => $output) { echo "\n=== " . $label . " ===\n"; echo substr($output, 0, 1200) . "\n"; }
+﻿<?php
+$file = "/var/www/html/wp-content/plugins/sovereign-builder/advanced/class-schema-designer.php";
+echo "Lines: " . substr_count(file_get_contents($file), "\n") . "\n";
+echo strpos(file_get_contents($file), "ob_start") !== false ? "HAS OB_START - broken\n" : "CLEAN\n";
+echo strpos(file_get_contents($file), "<<<JS") !== false ? "HAS HEREDOC - broken\n" : "NO HEREDOC\n";
+

@@ -369,14 +369,732 @@ class SBVisualDesigner {
 		if ( ! current_user_can( 'manage_sovereign' ) ) {
 			wp_die( 'Insufficient permissions.' );
 		}
-		$blueprint_id = absint( $_GET['blueprint_id'] ?? 0 );
-		echo '<div class="wrap">';
-		echo '<h1>Visual App Designer</h1>';
-		echo '<div id="sb-visual-designer-canvas" data-blueprint="' . esc_attr( $blueprint_id ) . '" style="min-height:600px;border:1px solid #ddd;background:#f9f9f9;position:relative;">';
-		echo '<p style="padding:20px;color:#888;">Select a blueprint to visualize. Graph loads via REST.</p>';
-		echo '</div>';
-		echo '<script>window.sbVDBlueprint=' . (int) $blueprint_id . ';</script>';
-		echo '</div>';
+
+		global $wpdb;
+		$blueprints   = $wpdb->get_results( "SELECT id, slug, label, status FROM {$wpdb->prefix}sb_app_blueprints ORDER BY created_at DESC" );
+		$blueprint_id = absint( $_GET['blueprint_id'] ?? ( $blueprints[0]->id ?? 0 ) );
+		$rest_base    = esc_url_raw( get_rest_url( null, 'sovereign-builder/v1' ) );
+		$nonce        = wp_create_nonce( 'wp_rest' );
+		?>
+		<style>
+		#sb-vd-wrap { display:flex; height:calc(100vh - 80px); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; gap:0; overflow:hidden; }
+		#sb-vd-sidebar { width:280px; min-width:280px; background:#1a1a2e; color:#f5f0e8; display:flex; flex-direction:column; overflow:hidden; }
+		#sb-vd-sidebar-head { padding:1.25rem 1.5rem; border-bottom:2px solid #c9a84c; }
+		#sb-vd-sidebar-head h2 { margin:0; font-size:1rem; font-weight:700; color:#f5f0e8; letter-spacing:0.02em; }
+		#sb-vd-sidebar-head p { margin:0.25rem 0 0; font-size:0.75rem; color:#9ca3af; }
+		#sb-vd-bp-list { flex:1; overflow-y:auto; padding:0.75rem 0; }
+		.sb-vd-bp-item { padding:0.7rem 1.5rem; cursor:pointer; border-left:3px solid transparent; transition:all 0.15s; }
+		.sb-vd-bp-item:hover { background:rgba(255,255,255,0.05); }
+		.sb-vd-bp-item.active { border-left-color:#c9a84c; background:rgba(201,168,76,0.1); }
+		.sb-vd-bp-name { font-size:0.88rem; font-weight:600; color:#f5f0e8; }
+		.sb-vd-bp-slug { font-size:0.72rem; color:#6b7280; font-family:monospace; }
+		.sb-vd-bp-status { display:inline-flex; padding:0.1rem 0.5rem; border-radius:10px; font-size:0.68rem; font-weight:700; margin-top:0.25rem; }
+		.sb-vd-bp-status-active { background:#065f46; color:#6ee7b7; }
+		.sb-vd-bp-status-installed { background:#1e3a5f; color:#93c5fd; }
+		#sb-vd-main { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#f8fafc; }
+		#sb-vd-toolbar { background:#fff; border-bottom:1px solid #e5e7eb; padding:0.75rem 1.5rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+		#sb-vd-toolbar h3 { margin:0; font-size:1rem; color:#1a1a2e; font-weight:700; flex:1; }
+		.sb-vd-btn { padding:0.45rem 1rem; border-radius:6px; font-size:0.82rem; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; }
+		.sb-vd-btn-primary { background:#1a1a2e; color:#c9a84c; }
+		.sb-vd-btn-primary:hover { background:#252545; }
+		.sb-vd-btn-outline { background:#fff; color:#374151; border:1.5px solid #e5e7eb !important; }
+		.sb-vd-btn-outline:hover { border-color:#c9a84c !important; color:#1a1a2e; }
+		.sb-vd-tab-bar { display:flex; gap:0; border-bottom:1px solid #e5e7eb; background:#fff; padding:0 1.5rem; }
+		.sb-vd-tab { padding:0.65rem 1.1rem; font-size:0.82rem; font-weight:600; color:#6b7280; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; background:none; border-top:none; border-left:none; border-right:none; transition:all 0.15s; }
+		.sb-vd-tab.active { color:#1a1a2e; border-bottom-color:#c9a84c; }
+		#sb-vd-content { flex:1; overflow:auto; padding:1.5rem; }
+		.sb-vd-panel { display:none; }
+		.sb-vd-panel.active { display:block; }
+
+		/* Graph canvas */
+		#sb-vd-canvas { width:100%; min-height:500px; position:relative; background:#fff; border-radius:10px; border:1px solid #e5e7eb; overflow:auto; cursor:grab; }
+		#sb-vd-canvas:active { cursor:grabbing; }
+		svg#sb-graph-svg { display:block; min-width:100%; min-height:500px; }
+
+		/* Node styles */
+		.sb-node { cursor:pointer; }
+		.sb-node:hover rect { filter:brightness(0.95); stroke-width:3; }
+		.sb-node rect { rx:8; ry:8; stroke-width:2; transition:all 0.15s; }
+		.sb-node text { font-family:-apple-system,sans-serif; font-size:12px; }
+		.sb-node-blueprint rect { fill:#1a1a2e; stroke:#c9a84c; }
+		.sb-node-blueprint text { fill:#f5f0e8; font-weight:700; }
+		.sb-node-form rect { fill:#eff6ff; stroke:#2563eb; }
+		.sb-node-form text { fill:#1e3a5f; }
+		.sb-node-road rect { fill:#f0fdf4; stroke:#059669; }
+		.sb-node-road text { fill:#065f46; }
+		.sb-node-signal rect { fill:#fef9c3; stroke:#d97706; }
+		.sb-node-signal text { fill:#78350f; }
+		.sb-node-schema rect { fill:#fdf4ff; stroke:#9333ea; }
+		.sb-node-schema text { fill:#581c87; }
+		.sb-node-page rect { fill:#fff7ed; stroke:#ea580c; }
+		.sb-node-page text { fill:#7c2d12; }
+		.sb-edge { stroke:#d1d5db; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+
+		/* Portal config panel */
+		.sb-pc-section { background:#fff; border-radius:10px; border:1px solid #e5e7eb; padding:1.5rem; margin-bottom:1.25rem; }
+		.sb-pc-section h4 { margin:0 0 1rem; font-size:0.9rem; font-weight:700; color:#1a1a2e; border-bottom:1px solid #f3f4f6; padding-bottom:0.75rem; }
+		.sb-pc-row { display:flex; align-items:center; gap:1rem; margin-bottom:0.85rem; }
+		.sb-pc-label { font-size:0.82rem; font-weight:600; color:#374151; width:160px; flex-shrink:0; }
+		.sb-pc-control select, .sb-pc-control input[type="text"] { padding:0.45rem 0.75rem; border:1.5px solid #e5e7eb; border-radius:6px; font-size:0.85rem; color:#1a1a2e; background:#f9fafb; outline:none; }
+		.sb-pc-control select:focus, .sb-pc-control input:focus { border-color:#c9a84c; background:#fff; }
+		.sb-nav-preview { display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap; }
+		.sb-nav-opt { padding:0.5rem 1rem; border-radius:6px; border:2px solid #e5e7eb; cursor:pointer; font-size:0.8rem; font-weight:600; color:#6b7280; transition:all 0.15s; background:#fff; }
+		.sb-nav-opt.selected { border-color:#c9a84c; color:#1a1a2e; background:#fefce8; }
+		.sb-stage-list { margin-top:0.75rem; }
+		.sb-stage-item { display:flex; align-items:center; gap:0.75rem; padding:0.65rem 1rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:7px; margin-bottom:0.5rem; }
+		.sb-stage-icon { font-size:1.1rem; }
+		.sb-stage-name { flex:1; font-size:0.88rem; font-weight:600; color:#1a1a2e; }
+		.sb-stage-type { font-size:0.75rem; color:#6b7280; font-family:monospace; }
+
+		/* Runtime panel */
+		.sb-rt-item { display:flex; align-items:center; gap:0.75rem; padding:0.65rem 1rem; border-bottom:1px solid #f3f4f6; }
+		.sb-rt-type { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#6b7280; width:80px; }
+		.sb-rt-slug { font-family:monospace; font-size:0.82rem; color:#1a1a2e; flex:1; }
+		.sb-rt-status { font-size:0.75rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:10px; }
+		.sb-rt-active { background:#ecfdf5; color:#059669; }
+		.sb-rt-missing { background:#fef2f2; color:#dc2626; }
+		.sb-rt-draft { background:#fef9c3; color:#92400e; }
+		</style>
+
+		<div id="sb-vd-wrap">
+			<!-- Sidebar: blueprint list -->
+			<div id="sb-vd-sidebar">
+				<div id="sb-vd-sidebar-head">
+					<h2>⚙ Visual Designer</h2>
+					<p>Select a blueprint to design</p>
+				</div>
+				<div id="sb-vd-bp-list">
+					<?php foreach ( $blueprints as $bp ) : ?>
+					<div class="sb-vd-bp-item <?php echo $bp->id === $blueprint_id ? 'active' : ''; ?>"
+						onclick="sbVDLoad(<?php echo (int) $bp->id; ?>, '<?php echo esc_js( $bp->label ); ?>', this)">
+						<div class="sb-vd-bp-name"><?php echo esc_html( $bp->label ); ?></div>
+						<div class="sb-vd-bp-slug"><?php echo esc_html( $bp->slug ); ?></div>
+						<span class="sb-vd-bp-status sb-vd-bp-status-<?php echo esc_attr( $bp->status ); ?>">
+							<?php echo esc_html( strtoupper( $bp->status ) ); ?>
+						</span>
+					</div>
+					<?php endforeach; ?>
+					<?php if ( empty( $blueprints ) ) : ?>
+					<div style="padding:1.5rem;color:#6b7280;font-size:0.85rem;">No blueprints installed yet.</div>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<!-- Main area -->
+			<div id="sb-vd-main">
+				<div id="sb-vd-toolbar">
+					<h3 id="sb-vd-title">
+						<?php echo $blueprints ? esc_html( $blueprints[0]->label ?? 'Select a Blueprint' ) : 'No Blueprints'; ?>
+					</h3>
+					<button class="sb-vd-btn sb-vd-btn-outline" onclick="sbVDRefresh()">↻ Refresh</button>
+					<button class="sb-vd-btn sb-vd-btn-primary" onclick="sbVDActivate()">▶ Activate Blueprint</button>
+					<a id="sb-vd-export-btn" class="sb-vd-btn sb-vd-btn-outline" href="#" onclick="sbVDExport(); return false;">⬇ Export JSON</a>
+				</div>
+
+				<div class="sb-vd-tab-bar">
+					<button class="sb-vd-tab active" onclick="sbVDTab('graph', this)">Graph View</button>
+					<button class="sb-vd-tab" onclick="sbVDTab('portal', this)">Portal Config</button>
+					<button class="sb-vd-tab" onclick="sbVDTab('runtime', this)">Runtime Status</button>
+					<button class="sb-vd-tab" onclick="sbVDTab('json', this)">Blueprint JSON</button>
+				</div>
+
+				<div id="sb-vd-content">
+
+					<!-- Graph panel -->
+					<div class="sb-vd-panel active" id="sb-panel-graph">
+						<div id="sb-vd-canvas">
+							<svg id="sb-graph-svg">
+								<defs>
+									<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5"
+										markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+										<path d="M2 1L8 5L2 9" fill="none" stroke="#d1d5db"
+											stroke-width="1.5" stroke-linecap="round"/>
+									</marker>
+								</defs>
+								<g id="sb-graph-edges"></g>
+								<g id="sb-graph-nodes"></g>
+							</svg>
+						</div>
+						<div id="sb-vd-node-detail" style="display:none;margin-top:1rem;background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:1.25rem;">
+							<h4 id="sb-nd-title" style="margin:0 0 0.75rem;color:#1a1a2e;"></h4>
+							<div id="sb-nd-body" style="font-size:0.85rem;color:#374151;"></div>
+						</div>
+					</div>
+
+					<!-- Portal config panel -->
+					<div class="sb-vd-panel" id="sb-panel-portal">
+						<div class="sb-pc-section">
+							<h4>Navigation Style</h4>
+							<div class="sb-pc-row">
+								<span class="sb-pc-label">Layout Type</span>
+								<div class="sb-pc-control">
+									<div class="sb-nav-preview">
+										<div class="sb-nav-opt selected" id="nav-opt-horizontal" onclick="sbVDSetNav('horizontal', this)">
+											☰ Horizontal Tabs
+										</div>
+										<div class="sb-nav-opt" id="nav-opt-vertical" onclick="sbVDSetNav('vertical', this)">
+											⫿ Left Sidebar
+										</div>
+										<div class="sb-nav-opt" id="nav-opt-dropdown" onclick="sbVDSetNav('dropdown', this)">
+											▾ Dropdown Menu
+										</div>
+										<div class="sb-nav-opt" id="nav-opt-flyout" onclick="sbVDSetNav('flyout', this)">
+											↗ Flyout Panels
+										</div>
+									</div>
+								</div>
+							</div>
+							<div class="sb-pc-row">
+								<span class="sb-pc-label">Lock Future Stages</span>
+								<div class="sb-pc-control">
+									<select id="pc-lock-stages">
+										<option value="1">Yes — sequential only</option>
+										<option value="0">No — free navigation</option>
+									</select>
+								</div>
+							</div>
+							<div class="sb-pc-row">
+								<span class="sb-pc-label">Show Progress Bar</span>
+								<div class="sb-pc-control">
+									<select id="pc-show-progress">
+										<option value="1">Yes</option>
+										<option value="0">No</option>
+									</select>
+								</div>
+							</div>
+							<div class="sb-pc-row">
+								<span class="sb-pc-label">Color Scheme</span>
+								<div class="sb-pc-control">
+									<select id="pc-color-scheme">
+										<option value="dark">Dark (Ink + Gold)</option>
+										<option value="light">Light (White + Gold)</option>
+										<option value="custom">Custom</option>
+									</select>
+								</div>
+							</div>
+						</div>
+
+						<div class="sb-pc-section">
+							<h4>Portal Stages</h4>
+							<div class="sb-stage-list" id="pc-stage-list">
+								<div style="color:#9ca3af;font-size:0.85rem;">Loading stages...</div>
+							</div>
+						</div>
+
+						<div class="sb-pc-section">
+							<h4>Portal Entry Point</h4>
+							<div class="sb-pc-row">
+								<span class="sb-pc-label">Portal Page Slug</span>
+								<div class="sb-pc-control">
+									<input type="text" id="pc-portal-slug" placeholder="e.g. my-book-portal" style="width:240px;">
+								</div>
+							</div>
+							<div style="margin-top:1rem;">
+								<button class="sb-vd-btn sb-vd-btn-primary" onclick="sbVDSavePortalConfig()">Save Portal Config →</button>
+								<span id="pc-save-msg" style="margin-left:1rem;font-size:0.82rem;color:#059669;display:none;">✓ Saved</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Runtime panel -->
+					<div class="sb-vd-panel" id="sb-panel-runtime">
+						<div style="background:#fff;border-radius:10px;border:1px solid #e5e7eb;overflow:hidden;">
+							<div style="background:#1a1a2e;padding:1rem 1.5rem;border-bottom:2px solid #c9a84c;">
+								<h4 style="margin:0;color:#f5f0e8;font-size:0.9rem;">Live Runtime Status</h4>
+							</div>
+							<div id="sb-rt-body">
+								<div style="padding:2rem;color:#9ca3af;text-align:center;">Loading runtime map...</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- JSON panel -->
+					<div class="sb-vd-panel" id="sb-panel-json">
+						<div style="background:#1a1a2e;border-radius:10px;overflow:hidden;">
+							<div style="padding:0.75rem 1.5rem;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;">
+								<span style="color:#c9a84c;font-size:0.82rem;font-weight:700;">BLUEPRINT JSON</span>
+								<button class="sb-vd-btn sb-vd-btn-outline sb-vd-btn-sm" onclick="sbVDCopyJSON()" style="font-size:0.75rem;padding:0.3rem 0.7rem;">Copy</button>
+							</div>
+							<pre id="sb-json-view" style="margin:0;padding:1.5rem;color:#e2e8f0;font-size:0.78rem;overflow:auto;max-height:600px;line-height:1.6;"></pre>
+						</div>
+					</div>
+
+				</div>
+			</div>
+		</div>
+
+		<script>
+		var sbVDCurrentId   = <?php echo (int) $blueprint_id; ?>;
+		var sbVDCurrentLabel = '';
+		var sbVDCurrentConfig = {};
+		var sbVDNavStyle    = 'horizontal';
+		var sbVDRestBase    = '<?php echo esc_js( $rest_base ); ?>';
+		var sbVDNonce       = '<?php echo esc_js( $nonce ); ?>';
+
+		// Node type colors
+		var sbNodeColors = {
+			blueprint: { fill:'#1a1a2e', stroke:'#c9a84c', text:'#f5f0e8' },
+			form:      { fill:'#eff6ff', stroke:'#2563eb', text:'#1e3a5f' },
+			road:      { fill:'#f0fdf4', stroke:'#059669', text:'#065f46' },
+			signal:    { fill:'#fef9c3', stroke:'#d97706', text:'#78350f' },
+			schema:    { fill:'#fdf4ff', stroke:'#9333ea', text:'#581c87' },
+			page:      { fill:'#fff7ed', stroke:'#ea580c', text:'#7c2d12' },
+			pipeline:  { fill:'#f0f9ff', stroke:'#0284c7', text:'#0c4a6e' },
+		};
+
+		function sbVDTab(tab, btn) {
+			document.querySelectorAll('.sb-vd-tab').forEach(function(t){ t.classList.remove('active'); });
+			document.querySelectorAll('.sb-vd-panel').forEach(function(p){ p.classList.remove('active'); });
+			btn.classList.add('active');
+			document.getElementById('sb-panel-' + tab).classList.add('active');
+			if (tab === 'runtime') { sbVDLoadRuntime(); }
+			if (tab === 'json')    { sbVDLoadJSON(); }
+			if (tab === 'portal')  { sbVDLoadPortalConfig(); }
+		}
+
+		function sbVDLoad(id, label, el) {
+			sbVDCurrentId    = id;
+			sbVDCurrentLabel = label;
+			document.getElementById('sb-vd-title').textContent = label;
+			document.querySelectorAll('.sb-vd-bp-item').forEach(function(e){ e.classList.remove('active'); });
+			if (el) { el.classList.add('active'); }
+			sbVDLoadGraph();
+			// Update URL without reload
+			var url = new URL(window.location.href);
+			url.searchParams.set('blueprint_id', id);
+			window.history.replaceState({}, '', url);
+		}
+
+		function sbVDRefresh() { sbVDLoadGraph(); }
+
+		function sbVDLoadGraph() {
+			if (!sbVDCurrentId) { return; }
+			sbVDRenderGraphFromConfig();
+		}
+
+		function sbVDRenderGraphFromConfig() {
+			if (!sbVDCurrentId) { return; }
+			// Fallback: build graph from exported blueprint config
+			fetch(sbVDRestBase + '/blueprint/export/' + sbVDCurrentId, {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(config){
+				if (!config || config.code === 'not_found' || config.error) {
+					console.error('Blueprint export error:', config);
+					var nodesG = document.getElementById('sb-graph-nodes');
+					if(nodesG) nodesG.innerHTML = '<text x="400" y="200" text-anchor="middle" fill="#dc2626" font-size="14">Blueprint not found or not accessible.</text>';
+					return;
+				}
+				sbVDCurrentConfig = config;
+				var nodes = [], edges = [];
+				var cx = 400, cy = 60, W = 160, H = 50, gap = 180;
+
+				// Root
+				nodes.push({ id:'bp', type:'blueprint', label: config.label || config.slug, x: cx, y: cy });
+
+				var sections = [
+					{ key:'forms',    type:'form',     color:'form' },
+					{ key:'schemas',  type:'schema',   color:'schema' },
+					{ key:'pages',    type:'page',     color:'page' },
+					{ key:'roads',    type:'road',     color:'road' },
+					{ key:'signals',  type:'signal',   color:'signal' },
+				];
+
+				var rowY = cy + 130;
+				sections.forEach(function(sec) {
+					var items = config[sec.key];
+					if (!items || !items.length) { return; }
+					var totalW = items.length * gap;
+					var startX = Math.max(40, cx - totalW/2 + gap/2);
+					items.forEach(function(item, i) {
+						var label = item.label || item.slug || item.title || item.road_key || item;
+						if (typeof label !== 'string') { label = String(label); }
+						var nid = sec.type + '_' + i;
+						var itemSlug = (item && typeof item === 'object') ? (item.slug || item.road_key || '') : String(item || '');
+						nodes.push({ id:nid, type:sec.type, label:label, slug:itemSlug, x: startX + i*gap, y: rowY });
+						edges.push({ from:'bp', to:nid });
+					});
+					rowY += 130;
+				});
+
+				// Pipeline
+				if (config.pipeline) {
+					nodes.push({ id:'pipeline', type:'pipeline', label: config.pipeline.label || 'AI Pipeline', x: cx, y: rowY });
+					edges.push({ from:'bp', to:'pipeline' });
+				}
+
+				sbVDRenderGraph({ nodes:nodes, edges:edges });
+			})
+			.catch(function(e){ console.error(e); });
+		}
+
+		function sbVDRenderGraph(data) {
+			var svg    = document.getElementById('sb-graph-svg');
+			var nodesG = document.getElementById('sb-graph-nodes');
+			var edgesG = document.getElementById('sb-graph-edges');
+			nodesG.innerHTML = '';
+			edgesG.innerHTML = '';
+
+			if (!data.nodes || !data.nodes.length) {
+				nodesG.innerHTML = '<text x="400" y="200" text-anchor="middle" fill="#9ca3af" font-size="14">No graph data — activate blueprint first</text>';
+				return;
+			}
+
+			var nodeMap = {};
+			data.nodes.forEach(function(n){ nodeMap[n.id] = n; });
+
+			var W = 160, H = 46, rx = 8;
+
+			// Draw edges first
+			data.edges.forEach(function(e) {
+				var from = nodeMap[e.from], to = nodeMap[e.to];
+				if (!from || !to) { return; }
+				var line = document.createElementNS('http://www.w3.org/2000/svg','line');
+				line.setAttribute('x1', from.x + W/2);
+				line.setAttribute('y1', from.y + H);
+				line.setAttribute('x2', to.x + W/2);
+				line.setAttribute('y2', to.y);
+				line.setAttribute('class', 'sb-edge');
+				edgesG.appendChild(line);
+			});
+
+			// Draw nodes
+			var maxX = 0, maxY = 0;
+			data.nodes.forEach(function(n) {
+				var colors = sbNodeColors[n.type] || sbNodeColors.form;
+				var g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+				g.setAttribute('class', 'sb-node');
+				g.setAttribute('transform', 'translate(' + n.x + ',' + n.y + ')');
+				g.addEventListener('click', function(){
+					if (n.type === 'signal') { sbVDShowSignalActivity(n); }
+					else { sbVDShowNodeDetail(n); }
+				});
+				g.addEventListener('dblclick', function(){ sbVDOpenNode(n); });
+
+				var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+				rect.setAttribute('width', W);
+				rect.setAttribute('height', H);
+				rect.setAttribute('rx', rx);
+				rect.setAttribute('fill', colors.fill);
+				rect.setAttribute('stroke', colors.stroke);
+				rect.setAttribute('stroke-width', '2');
+				g.appendChild(rect);
+
+				// Type badge
+				var badge = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				badge.setAttribute('x', 8);
+				badge.setAttribute('y', 16);
+				badge.setAttribute('fill', colors.stroke);
+				badge.setAttribute('font-size', '9');
+				badge.setAttribute('font-weight', '700');
+				badge.setAttribute('text-transform', 'uppercase');
+				badge.textContent = n.type.toUpperCase();
+				g.appendChild(badge);
+
+				// Label
+				var label = n.label || n.slug || n.id;
+				if (label.length > 18) { label = label.substring(0, 17) + '…'; }
+				var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+				text.setAttribute('x', W/2);
+				text.setAttribute('y', 32);
+				text.setAttribute('text-anchor', 'middle');
+				text.setAttribute('fill', colors.text);
+				text.setAttribute('font-size', '12');
+				text.setAttribute('font-weight', '600');
+				text.textContent = label;
+				g.appendChild(text);
+
+				nodesG.appendChild(g);
+				maxX = Math.max(maxX, n.x + W + 40);
+				maxY = Math.max(maxY, n.y + H + 40);
+			});
+
+			var padX = 60, padY = 40;
+			svg.setAttribute('viewBox', '0 0 ' + (Math.max(maxX, 800) + padX) + ' ' + (Math.max(maxY, 400) + padY));
+			svg.setAttribute('width', Math.max(maxX, 800) + padX);
+			svg.setAttribute('height', Math.max(maxY, 400) + padY);
+			svg.style.minHeight = (Math.max(maxY, 400) + padY) + 'px';
+			svg.style.minWidth  = (Math.max(maxX, 800) + padX) + 'px';
+			// Scroll canvas to show root node
+			var canvas = document.getElementById('sb-vd-canvas');
+			if (canvas) { canvas.scrollLeft = 0; canvas.scrollTop = 0; }
+		}
+
+		function sbVDShowNodeDetail(node) {
+			var detail = document.getElementById('sb-vd-node-detail');
+			var title  = document.getElementById('sb-nd-title');
+			var body   = document.getElementById('sb-nd-body');
+			title.textContent = node.type.toUpperCase() + ': ' + (node.label || node.slug || node.id);
+			body.innerHTML = '<table style="width:100%;border-collapse:collapse;">' +
+				Object.entries(node).map(function(e){
+					return '<tr><td style="padding:0.3rem 0.5rem;font-weight:600;color:#6b7280;width:120px;">' + e[0] + '</td>' +
+					'<td style="padding:0.3rem 0.5rem;font-family:monospace;color:#1a1a2e;">' + String(e[1]) + '</td></tr>';
+				}).join('') + '</table>' +
+				'<div style="margin-top:0.75rem;"><button class="sb-vd-btn sb-vd-btn-primary" onclick="sbVDOpenNode(window._sbVDLastNode)">Open →</button></div>';
+			window._sbVDLastNode = node;
+			detail.style.display = 'block';
+		}
+
+		function sbVDOpenNode(node) {
+			if (!node) { return; }
+			var base = '<?php echo esc_js( admin_url( "admin.php" ) ); ?>';
+			var slug = node.slug || '';
+
+			switch(node.type) {
+				case 'blueprint':
+					window.open(base + '?page=sb-blueprints', '_blank');
+					break;
+
+				case 'form':
+					fetch(sbVDRestBase + '/form/lookup?slug=' + encodeURIComponent(slug), { headers: { 'X-WP-Nonce': sbVDNonce } })
+					.then(function(r){ return r.json(); })
+					.then(function(d){ window.open(base + '?page=sb-tiny-forms' + (d && d.id ? '&action=edit&id=' + d.id : ''), '_blank'); })
+					.catch(function(){ window.open(base + '?page=sb-tiny-forms', '_blank'); });
+					break;
+
+				case 'schema':
+					window.open(base + '?page=sb-schema-designer' + (slug ? '&slug=' + encodeURIComponent(slug) : ''), '_blank');
+					break;
+
+				case 'road':
+					window.open(base + '?page=sb-roads', '_blank');
+					break;
+
+				case 'signal':
+					// Show signal activity in detail panel
+					sbVDShowSignalActivity(node);
+					// Don't navigate - activity shows in detail panel
+					break;
+
+				case 'page':
+					console.log('Looking up page with slug:', slug);
+					fetch('<?php echo esc_js( get_rest_url( null, "wp/v2/pages" ) ); ?>?slug=' + encodeURIComponent(slug) + '&_fields=id,slug,title&per_page=5', { headers: { 'X-WP-Nonce': sbVDNonce } })
+					.then(function(r){ return r.json(); })
+					.then(function(pages){
+						console.log('Pages found for slug "' + slug + '":', pages);
+						if (pages && pages.length && pages[0].id) {
+                                var url = "http://localhost:8080/wp-admin/post.php?post=" + pages[0].id + "&action=edit";
+							console.log('Opening:', url, 'for page:', pages[0].title);
+							window.open(url, '_blank');
+						} else {
+							window.open('<?php echo esc_js( admin_url( "edit.php?post_type=page" ) ); ?>', '_blank');
+						}
+					})
+					.catch(function(e){ console.error('Page lookup failed:', e); window.open('<?php echo esc_js( admin_url( "edit.php?post_type=page" ) ); ?>', '_blank'); });
+					break;
+
+				case 'pipeline':
+					window.open(base + '?page=sb-debugger-console', '_blank');
+					break;
+
+				case 'surface':
+					window.open(base + '?page=sb-ui-surfaces', '_blank');
+					break;
+
+				default:
+					window.open(base + '?page=sb-blueprints', '_blank');
+			}
+		}
+
+
+		function sbVDShowSignalActivity(node) {
+			var slug = node.slug || '';
+			if (!slug) { return; }
+			var detail = document.getElementById('sb-vd-node-detail');
+			var title  = document.getElementById('sb-nd-title');
+			var body   = document.getElementById('sb-nd-body');
+			title.textContent = 'SIGNAL: ' + slug;
+			body.innerHTML = '<p style="color:#6b7280;font-size:0.85rem;">Loading signal activity...</p>';
+			detail.style.display = 'block';
+			// Fetch signal activity from REST
+			fetch(sbVDRestBase + '/signal/activity?signal_type=' + encodeURIComponent(slug) + '&limit=10', {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(data){
+				if (!data || data.error) {
+					body.innerHTML = '<p style="color:#6b7280;font-size:0.85rem;">No activity recorded yet for this signal.</p>';
+					return;
+				}
+				var html = '<div style="font-size:0.82rem;">';
+				html += '<div style="display:flex;justify-content:space-between;margin-bottom:0.75rem;">';
+				html += '<strong style="color:#1a1a2e;">' + slug + '</strong>';
+				html += '<span style="color:#c9a84c;font-weight:700;">' + data.total + ' firing' + (data.total !== 1 ? 's' : '') + '</span>';
+				html += '</div>';
+				if (data.events && data.events.length) {
+					html += '<table style="width:100%;border-collapse:collapse;">';
+					html += '<tr><th style="text-align:left;color:#6b7280;font-size:0.72rem;padding:0.3rem 0.5rem;border-bottom:1px solid #f3f4f6;">TIME</th><th style="text-align:left;color:#6b7280;font-size:0.72rem;padding:0.3rem 0.5rem;border-bottom:1px solid #f3f4f6;">USER</th><th style="text-align:right;color:#6b7280;font-size:0.72rem;padding:0.3rem 0.5rem;border-bottom:1px solid #f3f4f6;">VALUE</th></tr>';
+					data.events.forEach(function(e) {
+						html += '<tr>';
+						html += '<td style="padding:0.35rem 0.5rem;color:#374151;font-family:monospace;font-size:0.78rem;">' + e.triggered_at + '</td>';
+						html += '<td style="padding:0.35rem 0.5rem;color:#374151;">' + (e.user_email || 'User #' + e.user_id) + '</td>';
+						html += '<td style="padding:0.35rem 0.5rem;color:#059669;text-align:right;font-weight:700;">' + parseFloat(e.current_value).toFixed(1) + '</td>';
+						html += '</tr>';
+					});
+					html += '</table>';
+				} else {
+					html += '<p style="color:#9ca3af;">No firings recorded yet.</p>';
+				}
+				html += '</div>';
+				body.innerHTML = html;
+			})
+			.catch(function(){ body.innerHTML = '<p style="color:#9ca3af;">Could not load signal activity.</p>'; });
+		}
+
+		function sbVDLoadPortalConfig() {
+			fetch(sbVDRestBase + '/blueprint/export/' + sbVDCurrentId, {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(config){
+				sbVDCurrentConfig = config;
+				var portal = config.portal || {};
+				var navStyle = portal.nav || 'horizontal';
+				sbVDSetNav(navStyle, null);
+
+				document.getElementById('pc-lock-stages').value = portal.lock_stages !== false ? '1' : '0';
+				document.getElementById('pc-show-progress').value = portal.show_progress !== false ? '1' : '0';
+				document.getElementById('pc-color-scheme').value = portal.color_scheme || 'dark';
+				document.getElementById('pc-portal-slug').value = portal.portal_slug || (config.slug + '-portal');
+
+				// Render stages
+				var stageList = document.getElementById('pc-stage-list');
+				var stages = portal.stages || [];
+				if (!stages.length && config.pages) {
+					stages = config.pages.map(function(p){ return { slug:p.slug, label:p.title, icon:'📄', form: p.shortcode }; });
+				}
+				if (stages.length) {
+					stageList.innerHTML = stages.map(function(s, i){
+						return '<div class="sb-stage-item">' +
+							'<span class="sb-stage-icon">' + (s.icon || '📄') + '</span>' +
+							'<span class="sb-stage-name">' + (s.label || s.slug) + '</span>' +
+							'<span class="sb-stage-type">' + (s.slug || '') + '</span>' +
+							'</div>';
+					}).join('');
+				} else {
+					stageList.innerHTML = '<div style="color:#9ca3af;font-size:0.85rem;">No stages defined. Add pages to your blueprint.</div>';
+				}
+			});
+		}
+
+		function sbVDSetNav(style, el) {
+			sbVDNavStyle = style;
+			document.querySelectorAll('.sb-nav-opt').forEach(function(o){ o.classList.remove('selected'); });
+			var target = el || document.getElementById('nav-opt-' + style);
+			if (target) { target.classList.add('selected'); }
+		}
+
+		function sbVDSavePortalConfig() {
+			if (!sbVDCurrentConfig) { return; }
+			sbVDCurrentConfig.portal = {
+				nav:           sbVDNavStyle,
+				lock_stages:   document.getElementById('pc-lock-stages').value === '1',
+				show_progress: document.getElementById('pc-show-progress').value === '1',
+				color_scheme:  document.getElementById('pc-color-scheme').value,
+				portal_slug:   document.getElementById('pc-portal-slug').value,
+				stages:        sbVDCurrentConfig.pages ? sbVDCurrentConfig.pages.map(function(p){
+					return { slug:p.slug, label:p.title, icon:'📄' };
+				}) : [],
+			};
+			// Save back to blueprint via install (upsert)
+			fetch(sbVDRestBase + '/blueprint/import', {
+				method: 'POST',
+				headers: { 'Content-Type':'application/json', 'X-WP-Nonce': sbVDNonce },
+				body: JSON.stringify(sbVDCurrentConfig)
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(res){
+				var msg = document.getElementById('pc-save-msg');
+				msg.style.display = 'inline';
+				msg.textContent = res.success || res.id ? '✓ Portal config saved' : '✗ Save failed';
+				msg.style.color = res.success || res.id ? '#059669' : '#dc2626';
+				setTimeout(function(){ msg.style.display='none'; }, 3000);
+			});
+		}
+
+		function sbVDLoadRuntime() {
+			fetch(sbVDRestBase + '/blueprint/export/' + sbVDCurrentId, {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(config){
+				var items = [];
+				(config.forms || []).forEach(function(f){ items.push({ type:'form', slug: f.slug || f, status:'active' }); });
+				(config.schemas || []).forEach(function(s){ items.push({ type:'schema', slug: s.slug || s, status:'active' }); });
+				(config.pages || []).forEach(function(p){ items.push({ type:'page', slug: p.slug, status:'active' }); });
+				(config.signals || []).forEach(function(s){ items.push({ type:'signal', slug: s, status:'active' }); });
+				(config.roads || []).forEach(function(r){ items.push({ type:'road', slug: r.road_key, status:'active' }); });
+				if (config.pipeline) { items.push({ type:'pipeline', slug: config.pipeline.slug, status:'active' }); }
+
+				var html = items.map(function(item){
+					var statusClass = 'sb-rt-' + (item.status || 'missing');
+					return '<div class="sb-rt-item">' +
+						'<span class="sb-rt-type">' + item.type + '</span>' +
+						'<span class="sb-rt-slug">' + item.slug + '</span>' +
+						'<span class="sb-rt-status ' + statusClass + '">' + (item.status||'missing').toUpperCase() + '</span>' +
+						'</div>';
+				}).join('');
+				document.getElementById('sb-rt-body').innerHTML = html || '<div style="padding:2rem;color:#9ca3af;text-align:center;">No objects found.</div>';
+			});
+		}
+
+		function sbVDLoadJSON() {
+			fetch(sbVDRestBase + '/blueprint/export/' + sbVDCurrentId, {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(config){
+				document.getElementById('sb-json-view').textContent = JSON.stringify(config, null, 2);
+			});
+		}
+
+		function sbVDCopyJSON() {
+			var text = document.getElementById('sb-json-view').textContent;
+			navigator.clipboard.writeText(text).then(function(){
+				alert('Blueprint JSON copied to clipboard');
+			});
+		}
+
+		function sbVDExport() {
+			fetch(sbVDRestBase + '/blueprint/export/' + sbVDCurrentId, {
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(data){
+				var blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+				var a    = document.createElement('a');
+				a.href   = URL.createObjectURL(blob);
+				a.download = (data.slug || 'blueprint') + '.json';
+				a.click();
+			});
+		}
+
+		function sbVDActivate() {
+			if (!sbVDCurrentId) { return; }
+			if (!confirm('Activate this blueprint? This will create WordPress pages and deploy all forms and schemas.')) { return; }
+			fetch(sbVDRestBase + '/blueprint/activate/' + sbVDCurrentId, {
+				method: 'POST',
+				headers: { 'X-WP-Nonce': sbVDNonce }
+			})
+			.then(function(r){ return r.json(); })
+			.then(function(res){
+				if (res.hitm_required) {
+					alert('HITM approval required before activation.');
+				} else {
+					alert('Blueprint activated successfully! Pages and forms have been deployed.');
+					sbVDLoadGraph();
+				}
+			})
+			.catch(function(){ alert('Activation failed. Check the audit log.'); });
+		}
+
+		// Auto-load on page ready
+		document.addEventListener('DOMContentLoaded', function() {
+			if (sbVDCurrentId) { sbVDRenderGraphFromConfig(); }
+		});
+		</script>
+		<?php
 	}
 
 	// ── REST wrapper methods ─────────────────────────────────────────────────────
