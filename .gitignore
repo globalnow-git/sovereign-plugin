@@ -1,0 +1,8 @@
+﻿# Docker data - never commit
+data/
+
+# Zip files
+*.zip
+
+# Logs
+*.log
